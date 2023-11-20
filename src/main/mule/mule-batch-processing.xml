@@ -1,0 +1,223 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core" xmlns:batch="http://www.mulesoft.org/schema/mule/batch"
+	xmlns:http="http://www.mulesoft.org/schema/mule/http"
+	xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/batch http://www.mulesoft.org/schema/mule/batch/current/mule-batch.xsd
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd">
+	<http:listener-config name="HTTP_Listener_config" doc:name="HTTP Listener config" doc:id="d64eb05f-7d69-4ce3-9a99-844b63cc1bab" >
+		<http:listener-connection host="0.0.0.0" port="8081" />
+	</http:listener-config>
+	<!-- Batch processing with Aggregator and default settings -->
+	<flow name="mule-batch-processingFlow" doc:id="cd885cb8-4b13-4871-85cc-4b6da83b9bd4" >
+		<http:listener doc:name="Listener" doc:id="9f2f8667-8152-4ed8-996e-1d6eadae9b6c" config-ref="HTTP_Listener_config" path="/batch"/>
+		<ee:transform doc:name="List of stores" doc:id="c973c05c-c7e0-412a-8180-a04ece74a275" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/json 
+---
+[1001,1002,1003,1004,1005,1006,1007,1008,1009,1010,1011,1012,1013,1014,1015,1016,1017,1018,1019,1020,1021,1022,1023,1024,1025,1026,1027,1028,1029,1030,1031,1032,1033,1034,1035,1036,1037,1038,1039,1040,1041,1042,1043,1044,1045,1046,1047,1048,1049,1050]]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<ee:transform doc:name="Retrieve stores data from Database" doc:id="5a862066-f6e3-4788-ab35-96f7d89723c0" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+ payload map {
+    storeId: $,
+    storeName: "Store" ++ $,
+    address: "address" ++ $,
+    status: if(isEven($)) "Active" else "Inactive"
+}]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<batch:job jobName="StoresBatch_Job" doc:id="5b44155c-ff9b-4823-8ebb-968b76987bbc" >
+			<batch:process-records >
+				<batch:step name="StoresBatch_Step" doc:id="a3170047-7760-4b37-a0ad-5570ab8c04f1" >
+					<ee:transform doc:name="Retrieve Produts from Database" doc:id="05c78e5d-60d0-418b-b422-7aad1b614f14" >
+						<ee:message >
+							<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+var storeId=payload.storeId
+---
+(payload.storeId + 1000 to payload.storeId + 1005) map {
+    productId: $,
+    productName: "Product" ++ $,
+    category: "Category" ++ $,
+    subCategory: "Sub Category" ++ $,
+    quantity: randomInt(20),
+    storeId: storeId
+}]]></ee:set-payload>
+						</ee:message>
+					</ee:transform>
+					<batch:aggregator doc:name="Batch Aggregator" doc:id="6347d4b7-ad2f-4ded-9095-3ac1ede8f677" size="5">
+						<logger level="INFO" doc:name="Sent to respective source Queue/REST" doc:id="4ac7726c-9b83-4c3a-982e-db596575c0cb" message="#[%dw 2.0&#10;output application/json&#10;---&#10;payload]"/>
+					</batch:aggregator>
+				</batch:step>
+			</batch:process-records>
+			<batch:on-complete >
+				<ee:transform doc:name="Details about Completion" doc:id="fc009392-6cee-4d9f-a5c9-83fa2ed7a2a1" >
+					<ee:message >
+						<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+{
+  InstanceId :payload.batchJobInstanceId,
+  totalRecords : payload.totalRecords,
+  processedrecords: payload.processedRecords,
+  failedRecords : payload.failedRecords,
+  successfulRecords: payload.successfulRecords
+
+}]]></ee:set-payload>
+					</ee:message>
+				</ee:transform>
+				<logger level="INFO" doc:name="On Complete Logger" doc:id="f1706322-5f60-4ff4-9bbb-324bb819b0ab" message="#[payload]"/>
+			</batch:on-complete>
+		</batch:job>
+		<ee:transform doc:name="Batch Response" doc:id="99f19e91-5f51-4a58-b870-ff46454a2735" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+payload]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+	</flow>
+	<!-- Nested Batch Processing -->
+		<flow name="mule-nested-batch-processingFlow" doc:id="6693bc22-7044-4569-a5c1-ae100dcb1f18" >
+		<http:listener doc:name="Listener" doc:id="d409bf27-5e22-4478-ba7d-2cbbec904687" config-ref="HTTP_Listener_config" path="/nested/batch"/>
+		<ee:transform doc:name="List of stores" doc:id="ad0777c1-1e42-41c3-aa2e-fd852010747b" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/json 
+---
+[1001,1002,1003,1004,1005,1006,1007,1008,1009,1010,1011,1012,1013,1014,1015,1016,1017,1018,1019,1020,1021,1022,1023,1024,1025,1026,1027,1028,1029,1030,1031,1032,1033,1034,1035,1036,1037,1038,1039,1040,1041,1042,1043,1044,1045,1046,1047,1048,1049,1050]]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<ee:transform doc:name="Retrieve stores data from Database" doc:id="8909046c-2651-47df-a097-929abd3dee01" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+ payload map {
+    storeId: $,
+    storeName: "Store" ++ $,
+    address: "address" ++ $,
+    status: if(isEven($)) "Active" else "Inactive"
+}]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<batch:job jobName="Nested_Batch_Job_Stores" doc:id="96238681-ba2a-43a1-80a9-9b7c79ce092f" maxFailedRecords="-1" blockSize="2">
+			<batch:process-records >
+				<batch:step name="Batch_Step_stores" doc:id="417d921b-43fb-4cb3-b41f-603c70baa12f" >
+					<ee:transform doc:name="Retrieve Produts from Database" doc:id="da6ae506-ce14-4715-a68e-99dafb06440c" >
+						<ee:message >
+							<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+var storeId=payload.storeId
+---
+(payload.storeId + 1000 to payload.storeId + 1010) map {
+    productId: $,
+    productName: "Product" ++ $,
+    category: "Category" ++ $,
+    subCategory: "Sub Category" ++ $,
+    quantity: randomInt(20),
+    storeId: storeId
+}]]></ee:set-payload>
+						</ee:message>
+					</ee:transform>
+					<flow-ref doc:name="price-and-promotions-flow" doc:id="910333ab-25b5-48cd-8b1f-7955c043315b" name="price-and-promotions-flow"/>
+				
+</batch:step>
+				<batch:step name="Failure_Batch_Step" doc:id="b9254e5b-7ed4-442f-9a56-ad494b444f38" acceptPolicy="ONLY_FAILURES">
+					<ee:transform doc:name="Capture Error Message" doc:id="fa07002e-1f8b-4c4c-8142-6d29ac026847" >
+						<ee:message >
+							<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+{
+	errorType: error.errorType,
+	message: error.description
+}
+]]></ee:set-payload>
+						</ee:message>
+					</ee:transform>
+					<batch:aggregator doc:name="Batch Aggregator" doc:id="456168c1-1726-45a6-8409-286178c8950b" size="5">
+						<logger level="INFO" doc:name="Capture errors and generate a report of failure records" doc:id="1020a9b7-1cf3-486c-bde2-ddbc42a5ed95" message="#[payload]"/>
+					</batch:aggregator>
+				</batch:step>
+			
+</batch:process-records>
+			<batch:on-complete >
+				<ee:transform doc:name="Details about Completion" doc:id="72c48380-9f59-459d-9c58-0535c0750d13" >
+					<ee:message >
+						<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+{
+  InstanceId :payload.batchJobInstanceId,
+  totalRecords : payload.totalRecords,
+  processedrecords: payload.processedRecords,
+  failedRecords : payload.failedRecords,
+  successfulRecords: payload.successfulRecords
+
+}]]></ee:set-payload>
+					</ee:message>
+				</ee:transform>
+				<logger level="INFO" doc:name="On Complete Logger" doc:id="a7606fd4-fbf9-4527-bb08-559022e64497" message="#[payload]"/>
+			
+</batch:on-complete>
+		</batch:job>
+		<ee:transform doc:name="Batch Response" doc:id="f6c354c7-3ae0-4dea-bf89-22238ffbf70b">
+					<ee:message>
+						<ee:set-payload><![CDATA[%dw 2.0
+output application/json
+---
+payload]]></ee:set-payload>
+					</ee:message>
+				</ee:transform>
+	
+</flow>
+	<flow name="price-and-promotions-flow" doc:id="4c64525b-efef-4fe7-b9ac-c6cae7697802" >
+		<batch:job jobName="priceandpromotionsBatch_Job" doc:id="d130e8cd-5fb3-4aa9-b440-a78bdcb5c711" blockSize="5">
+			<batch:process-records >
+				<batch:step name="priceandpromotionBatch_Step" doc:id="7ea09488-15b7-472b-9417-ad82c0d361f2" >
+					<ee:transform doc:name="Retrieve Price and Promotions data wrt ProductId" doc:id="c1c1059f-b0ba-436f-af9c-08234714dff6" >
+						<ee:message >
+							<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+payload ++ {
+	price: {
+		id: payload.productId - 500,
+		value: (payload.productId/55) as String {format: '##.00'} as Number,
+		currency: "GBP" 
+	},
+	promotions: [
+		{
+			status: 'Active',
+			promoId: 'Promotion 10% ' ++ payload.productId,
+			message: '10% of off from this product'
+		},
+	]
+}]]></ee:set-payload>
+						</ee:message>
+					</ee:transform>
+					<batch:aggregator doc:name="priceandpromoBatch Aggregator" doc:id="cbe7edd8-e2d4-4d62-acd4-802815d86a1f" size="5">
+						<ee:transform doc:name="Aggregate the response and sent to target system Queue/REST" doc:id="d17b77c3-db53-49b5-a906-400b383ad559" >
+							<ee:message >
+								<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+payload]]></ee:set-payload>
+							</ee:message>
+						</ee:transform>
+						<logger level="INFO" doc:name="Log Response" doc:id="f266964e-1eee-43a4-aec0-a1595bba7296" message="#[%dw 2.0&#10;output application/json&#10;---&#10;payload]"/>
+					</batch:aggregator>
+				</batch:step>
+			</batch:process-records>
+		</batch:job>
+	</flow>
+</mule>
